@@ -50,7 +50,8 @@ $zahlen = app(PushVersand::class)->an(
 
 Der Besitzer ist **polymorph und optional**: Die Apps binden Abos an
 unterschiedliche Modelle, und eine erlaubt bewusst anonyme Abos, weil ihr Frontend
-ohne Anmeldung nutzbar ist.
+ohne Anmeldung nutzbar ist. `abonnent_id` ist deshalb eine Zeichenkette und kein
+`nullableMorphs()`-BIGINT — sonst wäre jede App mit UUID-Schlüsseln ausgeschlossen.
 
 ## Was bei einem Fehlschlag passiert — die eigentliche Entscheidung
 

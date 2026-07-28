@@ -47,6 +47,13 @@ it('nimmt denselben Endpunkt nach dem Aufraeumen wieder an', function () {
 it('bindet ein Abo optional an einen Besitzer', function () {
     // Polymorph und optional, weil die Apps unterschiedliche Besitzer-Modelle haben
     // und eine bewusst anonyme Abos erlaubt (Frontend ohne Anmeldepflicht).
+    //
+    // **Der nicht-numerische Schluessel ist der Punkt dieses Tests**, nicht Beiwerk: Die
+    // Migration legte `abonnent_id` zunaechst per `nullableMorphs()` als BIGINT an. Auf
+    // der SQLite-Datenbank dieser Tests fiel das nie auf – SQLite speichert 'abc-123'
+    // klaglos in einer INTEGER-Spalte. Erst auf MySQL brach es mit "Data truncated for
+    // column 'abonnent_id'", also in der App und nicht hier. Der Test war gruen und hat
+    // nichts bewiesen; belastbar ist er erst mit einer Spalte, die Zeichenketten haelt.
     $besitzer = new class extends Model
     {
         protected $table = 'besitzer';

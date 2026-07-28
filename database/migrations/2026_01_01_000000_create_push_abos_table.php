@@ -22,7 +22,16 @@ return new class extends Migration
     {
         Schema::create('push_abos', function (Blueprint $tabelle) {
             $tabelle->uuid('id')->primary();
-            $tabelle->nullableMorphs('abonnent');
+
+            // **Bewusst nicht `nullableMorphs()`.** Das legt `abonnent_id` als
+            // BIGINT UNSIGNED an und schliesst damit jede App aus, deren Besitzer-Modell
+            // keinen numerischen Schluessel hat – eine der drei Thoule-Apps nutzt UUIDs,
+            // dort scheitert das Speichern auf MySQL mit "Data truncated". `uuidMorphs`
+            // waere derselbe Fehler mit umgekehrtem Vorzeichen. Eine Zeichenkette nimmt
+            // beides auf; Eloquent schreibt den Schluesselwert ohnehin als Zeichenkette.
+            $tabelle->string('abonnent_type')->nullable();
+            $tabelle->string('abonnent_id', 64)->nullable();
+            $tabelle->index(['abonnent_type', 'abonnent_id']);
 
             // Der Push-Endpunkt ist geräteweit eindeutig. 500 Zeichen, weil er als
             // `text` nicht indizierbar wäre – und ohne Unique-Index legt jede
