@@ -2,6 +2,7 @@
 
 namespace Thoule\Push\Transport;
 
+use Minishlink\WebPush\ContentEncoding;
 use Minishlink\WebPush\MessageSentReport;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
@@ -121,6 +122,19 @@ class MinishlinkTransport implements PushTransport
             'endpoint' => $abo->endpoint,
             'publicKey' => $abo->public_key,
             'authToken' => $abo->auth_token,
+            // **Ausdrücklich `aes128gcm` (RFC 8291), nicht die Voreinstellung der
+            // Bibliothek.** `Subscription::create()` fällt auf `aesgcm` zurück – die
+            // historische Entwurfs-Kodierung von vor der Standardisierung; die Bibliothek
+            // hält daran aus Rückwärtskompatibilität fest und kündigt den Wechsel erst für
+            // die nächste Hauptversion an.
+            //
+            // Der Unterschied ist im Betrieb **nicht sichtbar**: Der Push-Dienst prüft die
+            // Nutzlast nicht und antwortet auch bei veralteter Kodierung mit 201. Erst der
+            // Browser scheitert an der Entschlüsselung – und verwirft die Nachricht ohne
+            // Meldung, ohne Ereignis, ohne Protokolleintrag. Der Server meldet „zugestellt",
+            // die Nutzerin sieht nichts. Genau dieses Bild in Firefox und Edge war der
+            // Anlass (28.07.2026).
+            'contentEncoding' => ContentEncoding::aes128gcm,
         ]);
     }
 

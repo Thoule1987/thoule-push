@@ -129,6 +129,19 @@ Die Tests des Pakets prüfen den echten Transport gegen **echte HTTP-Antworten**
 (Guzzle-`MockHandler`). Ohne echten HTTP-Kanal liessen sich 410 und 500 — die
 beiden Antworten, an denen die ganze Ablaufbehandlung hängt — nur behaupten.
 
+## Kodierung: `aes128gcm`, ausdrücklich
+
+Der Transport setzt `contentEncoding` fest auf `aes128gcm` (RFC 8291).
+`Subscription::create()` fällt ohne diese Angabe auf `aesgcm` zurück – die historische
+Entwurfs-Kodierung; die Bibliothek hält daran aus Rückwärtskompatibilität fest.
+
+**Der Unterschied ist im Betrieb unsichtbar:** Der Push-Dienst prüft die Nutzlast nicht und
+antwortet auch bei veralteter Kodierung mit **201**. Erst der Browser scheitert an der
+Entschlüsselung und verwirft die Nachricht ohne Meldung. Der Server meldet „zugestellt", die
+Nutzerin sieht nichts, das Fehlerprotokoll bleibt leer. Ein Test prüft deshalb den
+tatsächlich hinausgehenden HTTP-Header, nicht die Rückgabe des Transports – die sähe in
+beiden Fällen gleich aus.
+
 ## DSGVO
 
 Endpunkt und Schlüssel sind pseudonyme personenbezogene Daten: Wer sie hat, kann

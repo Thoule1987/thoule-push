@@ -3,6 +3,7 @@
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Minishlink\WebPush\SubscriptionInterface;
@@ -20,6 +21,31 @@ function transportMit(Response ...$antworten): MinishlinkTransport
 
     return new MinishlinkTransport(fn (array $auth) => new WebPush($auth, [], 30, ['handler' => $handler]));
 }
+
+it('sendet mit der Standard-Kodierung aes128gcm, nicht mit dem veralteten aesgcm', function () {
+    // **Der Fehler, der von aussen wie Erfolg aussieht.** `Subscription::create()` fällt ohne
+    // Angabe auf `aesgcm` zurück – die historische Entwurfs-Kodierung von vor RFC 8291. Der
+    // Push-Dienst prüft die Nutzlast nicht und antwortet auch damit mit 201; erst der Browser
+    // scheitert an der Entschlüsselung und verwirft die Nachricht **stumm**. Server meldet
+    // „zugestellt", Nutzerin sieht nichts, Protokoll bleibt leer.
+    //
+    // Geprüft wird deshalb der tatsächlich hinausgehende Request, nicht die Rückgabe des
+    // Transports: Das Ergebnisobjekt sähe in beiden Fällen identisch aus.
+    $gesendet = [];
+    $handler = HandlerStack::create(new MockHandler([new Response(201)]));
+    $handler->push(Middleware::history($gesendet));
+
+    $transport = new MinishlinkTransport(fn (array $auth) => new WebPush($auth, [], 30, ['handler' => $handler]));
+    $transport->senden(abo(), ['title' => 'Hallo']);
+
+    $anfrage = $gesendet[0]['request'];
+
+    expect($anfrage->getHeaderLine('Content-Encoding'))->toBe('aes128gcm')
+        // Gegenprobe: Der VAPID-Header muss zur selben Kodierung passen – bei `aesgcm`
+        // wandert der öffentliche Schlüssel in `Crypto-Key`, bei `aes128gcm` ins
+        // `Authorization`-Feld nach dem Schema `vapid k=…,t=…`.
+        ->and($anfrage->getHeaderLine('Authorization'))->toStartWith('vapid ');
+});
 
 it('meldet Erfolg bei 201 Created', function () {
     $abo = abo();
