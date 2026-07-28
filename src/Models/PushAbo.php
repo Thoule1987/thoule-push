@@ -16,6 +16,8 @@ use Illuminate\Support\Carbon;
  * @property string $public_key
  * @property string $auth_token
  * @property Carbon|null $abgelaufen_at
+ * @property Carbon $created_at
+ * @property Carbon $updated_at
  */
 class PushAbo extends Model
 {
