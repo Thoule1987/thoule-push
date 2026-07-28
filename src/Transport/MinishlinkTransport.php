@@ -6,6 +6,7 @@ use Minishlink\WebPush\ContentEncoding;
 use Minishlink\WebPush\MessageSentReport;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
+use RuntimeException;
 use Thoule\Push\Contracts\PushTransport;
 use Thoule\Push\Models\PushAbo;
 use Thoule\Push\PushErgebnis;
@@ -141,16 +142,57 @@ class MinishlinkTransport implements PushTransport
     private function webPush(): WebPush
     {
         $auth = ['VAPID' => [
-            'subject' => (string) config('push.vapid.subject'),
+            'subject' => $this->subject(),
             'publicKey' => (string) config('push.vapid.public_key'),
             'privateKey' => (string) config('push.vapid.private_key'),
         ]];
 
-        if (is_callable($this->fabrik)) {
-            return ($this->fabrik)($auth);
+        // Die Fabrik tauscht **nur** den HTTP-Kanal aus. Jede Einstellung, die das Verhalten
+        // beeinflusst, gehört danach – sonst prüfte der Test eine anders konfigurierte
+        // Instanz als die, die im Betrieb läuft, und bewiese nichts.
+        $webPush = is_callable($this->fabrik)
+            ? ($this->fabrik)($auth)
+            : new WebPush($auth, [], (int) config('push.timeout', 30));
+
+        // Der VAPID-Header wird je Push-Dienst signiert und innerhalb dieses Versands
+        // wiederverwendet. Bei einer Nachricht an alle Abonnenten spart das eine Signatur
+        // pro Empfänger. Gefahrlos, weil für jeden Versand ein neuer WebPush entsteht – ein
+        // zwischengespeicherter Header kann also nicht über seine Gültigkeit hinaus
+        // benutzt werden.
+        return $webPush->setReuseVAPIDHeaders(true);
+    }
+
+    /**
+     * Die `sub`-Angabe des VAPID-Tokens: eine `mailto:`- oder `https:`-Adresse, unter der
+     * die Push-Dienste den Absender erreichen.
+     *
+     * **Warum das hier geprüft wird:** `VAPID::validate()` fragt mit `isset()` ab – eine
+     * **leere Zeichenkette kommt damit durch** und erzeugt ein Token mit leerem Betreff.
+     * Die Push-Dienste lehnen das ab oder nicht, je nach Dienst; im schlechteren Fall
+     * scheitert der Versand nur bei einem Teil der Nutzerinnen. Ein fehlender Wert soll
+     * deshalb hier auffliegen, mit dem Namen der Variablen, die zu setzen ist.
+     */
+    private function subject(): string
+    {
+        $subject = (string) config('push.vapid.subject');
+
+        if ($subject !== '') {
+            return $subject;
         }
 
-        return new WebPush($auth, [], (int) config('push.timeout', 30));
+        // Rückfall wie im abgelösten Wrapper: die eigene Adresse ist als Kontaktangabe
+        // brauchbar und besser als ein leeres Feld.
+        $appUrl = (string) config('app.url');
+
+        if ($appUrl !== '') {
+            return $appUrl;
+        }
+
+        throw new RuntimeException(
+            'VAPID-Betreff fehlt: weder `push.vapid.subject` (VAPID_SUBJECT) noch `app.url` sind gesetzt. '
+            .'Ohne ihn erzeugt die Bibliothek ein Token mit leerem Betreff, das je nach Push-Dienst '
+            .'angenommen oder abgelehnt wird.'
+        );
     }
 
     /**

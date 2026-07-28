@@ -47,6 +47,46 @@ it('sendet mit der Standard-Kodierung aes128gcm, nicht mit dem veralteten aesgcm
         ->and($anfrage->getHeaderLine('Authorization'))->toStartWith('vapid ');
 });
 
+it('faellt bei leerem VAPID-Betreff auf die App-Adresse zurueck, statt ein leeres Feld zu senden', function () {
+    // `VAPID::validate()` prueft mit `isset()` – eine leere Zeichenkette kommt durch und
+    // erzeugt ein Token mit leerem Betreff. Ob der Push-Dienst das annimmt, haengt vom
+    // Dienst ab; im schlechteren Fall scheitert der Versand nur bei einem Teil der Nutzer.
+    config(['push.vapid.subject' => '', 'app.url' => 'https://beispiel.test']);
+
+    $gesendet = [];
+    $handler = HandlerStack::create(new MockHandler([new Response(201)]));
+    $handler->push(Middleware::history($gesendet));
+
+    // Bewusst OHNE Fabrik: geprueft wird gerade die Zusammenstellung der VAPID-Angaben.
+    $transport = new MinishlinkTransport(fn (array $auth) => tap(
+        new WebPush($auth, [], 30, ['handler' => $handler]),
+        fn () => expect($auth['VAPID']['subject'])->toBe('https://beispiel.test')
+    ));
+
+    expect($transport->senden(abo(), ['title' => 'Hallo'])->erfolg)->toBeTrue();
+});
+
+it('bricht ab, wenn weder VAPID-Betreff noch App-Adresse gesetzt sind', function () {
+    config(['push.vapid.subject' => '', 'app.url' => '']);
+
+    expect(fn () => transportMit(new Response(201))->senden(abo(), []))
+        ->toThrow(RuntimeException::class);
+});
+
+it('signiert den VAPID-Header einmal und verwendet ihn im selben Versand wieder', function () {
+    // Bei einer Nachricht an alle Abonnenten spart das eine Signatur pro Empfaenger.
+    $gesendet = [];
+    $handler = HandlerStack::create(new MockHandler([new Response(201), new Response(201)]));
+    $handler->push(Middleware::history($gesendet));
+
+    $transport = new MinishlinkTransport(fn (array $auth) => new WebPush($auth, [], 30, ['handler' => $handler]));
+    $transport->sendenViele([abo('https://push.example/eins'), abo('https://push.example/zwei')], ['title' => 'Hallo']);
+
+    expect($gesendet)->toHaveCount(2)
+        ->and($gesendet[0]['request']->getHeaderLine('Authorization'))
+        ->toBe($gesendet[1]['request']->getHeaderLine('Authorization'));
+});
+
 it('meldet Erfolg bei 201 Created', function () {
     $abo = abo();
 

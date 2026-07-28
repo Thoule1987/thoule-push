@@ -142,6 +142,23 @@ Nutzerin sieht nichts, das Fehlerprotokoll bleibt leer. Ein Test prüft deshalb 
 tatsächlich hinausgehenden HTTP-Header, nicht die Rückgabe des Transports – die sähe in
 beiden Fällen gleich aus.
 
+## Was beim Ablösen des alten Wrappers verglichen wurde
+
+Der abgelöste `laravel-notification-channels/webpush` setzte mehrere Bibliotheks-Vorgaben
+still zurecht. Beim Nachbau ist das zweimal untergegangen (v0.2.1/v0.2.2). Der vollständige
+Abgleich, damit niemand ihn erneut führen muss:
+
+| Einstellung | Alter Wrapper | Hier |
+|---|---|---|
+| `contentEncoding` | `aes128gcm` ausdrücklich | ebenso (Vorgabe wäre `aesgcm`) |
+| VAPID-Betreff leer | Rückfall auf `url('/')` | Rückfall auf `app.url`, sonst Abbruch |
+| `setReuseVAPIDHeaders` | `true` | ebenso |
+| `setAutomaticPadding` | `true` → 2820 Bytes | Bibliotheks-Vorgabe ist bereits 2820 |
+| Guzzle-Optionen, Zeitlimit | `[]`, 30 s | ebenso |
+| Nutzlast | `title`/`body`/`icon` ohne Leerwerte | ebenso |
+| Abo bei 404/410 | löschen | **markieren** (bewusst anders, s. oben) |
+| Ereignis bei Erfolg | `NotificationSent` | keins – ein erfolgreicher Versand hinterlässt nichts |
+
 ## DSGVO
 
 Endpunkt und Schlüssel sind pseudonyme personenbezogene Daten: Wer sie hat, kann
